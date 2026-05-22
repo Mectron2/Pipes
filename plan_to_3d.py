@@ -38,7 +38,11 @@ def red_pipe_mask(image: np.ndarray) -> np.ndarray:
 
 
 def largest_component(mask: np.ndarray) -> np.ndarray:
-    count, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    kernel_size = 15
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+    mask_closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(mask_closed, connectivity=8)
     if count <= 1:
         raise ValueError("Could not find a red pipe component")
 
