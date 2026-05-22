@@ -72,6 +72,13 @@ def load_image(path: Path) -> tuple[np.ndarray, np.ndarray]:
     return bgr, gray
 
 
+def enhance_profile_contrast(bgr: np.ndarray, gray: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced_gray = clahe.apply(gray)
+    enhanced_bgr = cv2.cvtColor(enhanced_gray, cv2.COLOR_GRAY2BGR)
+    return enhanced_bgr, enhanced_gray
+
+
 def ensure_dir(path: Path | None) -> None:
     if path:
         path.mkdir(parents=True, exist_ok=True)
@@ -630,6 +637,7 @@ def draw_overlay(
 
 def parse_profile_image(image_path: Path, debug_dir: Path | None, epsilon: float) -> dict:
     image, gray = load_image(image_path)
+    image, gray = enhance_profile_contrast(image, gray)
     bounds = find_plot_bounds(gray)
     x0, y0, w, h = bounds
     crop_gray = gray[y0 : y0 + h, x0 : x0 + w]
