@@ -67,7 +67,7 @@ The end station of one profile is treated as the start station of the next profi
 ### 1. Parse Side/Profile Drawing
 
 ```bash
-.venv/bin/python main.py assets/pipe.png \
+.venv/bin/python profile_to_points.py assets/pipe.png \
   --out assets/points.json \
   --debug-dir assets/debug-profile \
   --epsilon 8
@@ -76,7 +76,7 @@ The end station of one profile is treated as the start station of the next profi
 Multiple profiles:
 
 ```bash
-.venv/bin/python main.py assets/profile_01.png assets/profile_02.png \
+.venv/bin/python profile_to_points.py assets/profile_01.png assets/profile_02.png \
   --out assets/points.json \
   --debug-dir assets/debug-profile
 ```

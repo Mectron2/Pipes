@@ -18,7 +18,7 @@ except ModuleNotFoundError as exc:
     )
     raise SystemExit(2) from exc
 
-import main
+import profile_to_points
 
 
 Point = tuple[float, float]
@@ -150,7 +150,7 @@ def cumulative_lengths(points: list[Point]) -> list[float]:
 def simplify_path(points: list[Point], epsilon: float) -> list[Point]:
     if epsilon <= 0:
         return points
-    return main.rdp(points, epsilon)
+    return profile_to_points.rdp(points, epsilon)
 
 
 def load_profile_points(profile_path: Path) -> list[dict]:
@@ -250,7 +250,7 @@ def build_3d_result(
                 "y_ft": round((origin_y - float(y)) * plan_ft_per_px, 2),
                 "z_ft": round(height, 2),
                 "chainage_ft": round(float(chainage_ft), 2),
-                "station": main.format_station(chainage_ft),
+                "station": profile_to_points.format_station(chainage_ft),
                 "height": round(height, 2),
             }
         )
@@ -321,7 +321,7 @@ def build_pipe_3d(
     sample_ft: float,
     simplify_px: float,
 ) -> dict:
-    image, _ = main.load_image(plan_path)
+    image, _ = profile_to_points.load_image(plan_path)
     red_mask = red_pipe_mask(image)
     clean_mask = largest_component(red_mask)
     centerline = ordered_centerline(clean_mask)
@@ -338,7 +338,7 @@ def build_pipe_3d(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build a 3D pipe polyline from a red plan-view pipe and profile heights.")
     parser.add_argument("plan_image", type=Path, help="Plan-view image with pipe highlighted in red")
-    parser.add_argument("--profile", type=Path, default=Path("assets/points.json"), help="Profile JSON from main.py")
+    parser.add_argument("--profile", type=Path, default=Path("assets/points.json"), help="Profile JSON from profile_to_points.py")
     parser.add_argument("--out", type=Path, default=Path("assets/pipe_3d.json"), help="Output 3D JSON path")
     parser.add_argument("--debug-dir", type=Path, default=None, help="Directory for debug masks and overlays")
     parser.add_argument("--sample-ft", type=float, default=10.0, help="Distance between sampled 3D points in feet")

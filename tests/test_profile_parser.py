@@ -3,23 +3,23 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import main
+import profile_to_points
 
 
 class ProfileParserTest(unittest.TestCase):
     def test_station_format(self):
-        self.assertEqual(main.format_station(0), "0+00")
-        self.assertEqual(main.format_station(263), "2+63")
-        self.assertEqual(main.format_station(1000), "10+00")
+        self.assertEqual(profile_to_points.format_station(0), "0+00")
+        self.assertEqual(profile_to_points.format_station(263), "2+63")
+        self.assertEqual(profile_to_points.format_station(1000), "10+00")
 
     def test_interpolated_station_labels(self):
-        labels = main.interpolated_station_labels(["0+00", "2+00", "4+00", "5+00"])
+        labels = profile_to_points.interpolated_station_labels(["0+00", "2+00", "4+00", "5+00"])
         self.assertEqual(labels, ["0+00", "1+00", "2+00", "3+00", "4+00", "5+00"])
 
     def test_pipe_profile_smoke(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "points.json"
-            result = main.parse_profile(Path("assets/pipe.png"), output, None, epsilon=8.0)
+            result = profile_to_points.parse_profile(Path("assets/pipe.png"), output, None, epsilon=8.0)
             saved = json.loads(output.read_text(encoding="utf-8"))
 
         self.assertEqual(result, saved)
@@ -74,7 +74,7 @@ class ProfileParserTest(unittest.TestCase):
             ],
         }
 
-        merged = main.merge_profile_results([first, second])
+        merged = profile_to_points.merge_profile_results([first, second])
 
         self.assertEqual([point["station_ft"] for point in merged["points"]], [0.0, 100.0, 150.0, 200.0])
         self.assertEqual([point["station"] for point in merged["points"]], ["0+00", "1+00", "1+50", "2+00"])

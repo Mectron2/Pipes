@@ -3,7 +3,7 @@ import json
 import sys
 from pathlib import Path
 
-import main as profile_parser
+import profile_to_points as profile_parser
 import pipe_json_to_obj
 import plan_to_3d
 
