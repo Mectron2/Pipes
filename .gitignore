@@ -1,3 +1,4 @@
 assets
 .venv
 .idea
+.env

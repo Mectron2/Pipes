@@ -5,6 +5,8 @@ Utilities for reconstructing an approximate 3D pipe model from scanned engineeri
 The pipeline uses:
 
 - a side/profile drawing to extract station/elevation points;
+- Gemini image editing to clean the profile drawing;
+- Gemini image editing to clean the plan drawing and highlight the target pipe route in red;
 - a plan-view drawing where the target pipe is highlighted in red;
 - the extracted profile heights to generate a 3D polyline;
 - the 3D polyline to export a Blender-importable OBJ tube mesh.
@@ -31,6 +33,12 @@ On macOS, Tesseract can usually be installed with:
 brew install tesseract
 ```
 
+The full pipeline always runs both the profile image and the plan image through Gemini image editing before the reconstruction steps. Set your Gemini API key in the environment:
+
+```bash
+export GEMINI_API_KEY="..."
+```
+
 ## Full Pipeline
 
 Run all steps with one command:
@@ -48,6 +56,8 @@ Default outputs:
 - `assets/points.json` - profile station/elevation points
 - `assets/pipe_3d.json` - 3D pipe polyline
 - `assets/pipe.obj` - Blender-importable tube mesh
+- `assets/debug-pipeline/gemini/profile.png` - Gemini-edited profile image, when `--debug-dir` is used
+- `assets/debug-pipeline/gemini/plan.png` - Gemini-edited plan image, when `--debug-dir` is used
 - `assets/debug-pipeline/` - debug masks, overlays, and summary
 
 Multiple side/profile drawings are supported. Pass them in route order:
@@ -83,6 +93,7 @@ Multiple profiles:
 
 What it does:
 
+- receives the Gemini-edited profile image in the full pipeline;
 - finds the profile graph area;
 - reads station/elevation axis labels with OCR;
 - extracts the force-main profile line;
@@ -95,6 +106,8 @@ What it does:
 - higher value: fewer profile points, smoother output.
 
 ### 2. Build 3D Polyline From Plan View
+
+In the full pipeline, this step receives the Gemini-edited plan image. When running `plan_to_3d.py` directly, pass a plan image where the target pipe is already highlighted in red.
 
 ```bash
 .venv/bin/python plan_to_3d.py assets/img.png \
