@@ -40,6 +40,7 @@ Run all steps with one command:
   --profile-image assets/pipe.png \
   --plan-image assets/img.png \
   --diameter-ft 0.5 \
+  --pipe-od-mm 152.4 \
   --debug-dir assets/debug-pipeline
 ```
 
@@ -59,6 +60,7 @@ Default outputs:
 - `assets/points.json` - profile station/elevation points
 - `assets/pipe_3d.json` - 3D pipe polyline
 - `assets/pipe.obj` - Blender-importable tube mesh
+- `assets/pipe_baseline_top_side.csv` - paired TOP/SIDE baseline CSV
 - `assets/debug-pipeline/` - debug masks, overlays, and summary
 
 Multiple side/profile drawings are supported. Pass them in route order:
@@ -173,6 +175,25 @@ Options:
 
 Blender can import `assets/pipe.obj` directly. The OBJ vertices are written in feet, so `1 Blender unit = 1 ft` for this generated model.
 
+### 4. Export TOP/SIDE Baseline CSV
+
+```bash
+.venv/bin/python pipe_top_side_csv.py \
+  --profile-image assets/profile-2.png \
+  --plan-image assets/top-2-highlighted.png \
+  --pipe-od-mm 426 \
+  --out assets/pipe_baseline_top_side.csv \
+  --profile-json assets/points.json \
+  --pipe-3d-json assets/pipe_3d.json \
+  --debug-dir assets/debug-top-side-csv
+```
+
+The CSV contains paired plan/profile rows with foot-based columns:
+
+- `TOP` rows use reconstructed plan coordinates from the red highlighted top drawing.
+- `SIDE` rows use the same stations with profile elevations from the side/profile drawing.
+- Coordinates and elevations are written as `*_ft`; pipe outside diameter is written as `pipe_od_mm`.
+
 ## Accuracy Notes
 
 The workflow is approximate.
@@ -218,6 +239,7 @@ Run all tests:
 .venv/bin/python -m unittest \
   tests/test_profile_parser.py \
   tests/test_plan_to_3d.py \
+  tests/test_pipe_top_side_csv.py \
   tests/test_pipe_json_to_obj.py \
   tests/test_pipeline.py
 ```
