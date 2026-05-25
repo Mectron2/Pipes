@@ -14,6 +14,23 @@ def debug_subdir(debug_dir: Path | None, name: str) -> Path | None:
     return debug_dir / name
 
 
+def prepare_plan_image(plan_image: Path, pipe_3d_json: Path, debug_dir: Path | None, use_gemini_plan: bool) -> Path:
+    if not use_gemini_plan:
+        return plan_image
+
+    import gemini_highlighter
+
+    gemini_output_dir = debug_subdir(debug_dir, "gemini")
+    if gemini_output_dir is None:
+        gemini_output_dir = pipe_3d_json.parent / "gemini"
+    gemini_output_dir.mkdir(parents=True, exist_ok=True)
+
+    highlighted_plan = gemini_output_dir / "plan.png"
+    if not gemini_highlighter.highlight_force_main(plan_image, highlighted_plan):
+        raise RuntimeError("Gemini plan highlighting failed")
+    return highlighted_plan
+
+
 def run_pipeline(
     profile_image: Path | list[Path],
     plan_image: Path,
@@ -28,8 +45,10 @@ def run_pipeline(
     obj_segments: int,
     cap_ends: bool,
     object_name: str,
+    use_gemini_plan: bool = False,
 ) -> dict:
     profile_images = profile_image if isinstance(profile_image, list) else [profile_image]
+    plan_image_used = prepare_plan_image(plan_image, pipe_3d_json, debug_dir, use_gemini_plan)
     profile = profile_parser.parse_profiles(
         profile_images,
         profile_json,
@@ -37,7 +56,7 @@ def run_pipeline(
         profile_epsilon,
     )
     pipe_3d = plan_to_3d.build_pipe_3d(
-        plan_image,
+        plan_image_used,
         profile_json,
         pipe_3d_json,
         debug_subdir(debug_dir, "plan-3d"),
@@ -56,6 +75,10 @@ def run_pipeline(
     summary = {
         "profile_image": [str(path) for path in profile_images],
         "plan_image": str(plan_image),
+        "plan_image_used": str(plan_image_used),
+        "gemini": {
+            "plan_enabled": use_gemini_plan,
+        },
         "outputs": {
             "profile_json": str(profile_json),
             "pipe_3d_json": str(pipe_3d_json),
@@ -92,6 +115,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--obj", type=Path, default=Path("assets/pipe.obj"), help="Final Blender-importable OBJ")
     parser.add_argument("--diameter-ft", type=float, required=True, help="Pipe outside diameter in feet")
     parser.add_argument("--debug-dir", type=Path, default=None, help="Root debug directory")
+    parser.add_argument(
+        "--use-gemini-plan",
+        action="store_true",
+        help="Use Gemini to highlight the plan pipe in red before running OpenCV reconstruction",
+    )
     parser.add_argument("--profile-epsilon", type=float, default=8.0, help="Profile RDP tolerance in pixels")
     parser.add_argument("--sample-ft", type=float, default=10.0, help="3D JSON sampling interval in feet")
     parser.add_argument("--plan-simplify-px", type=float, default=2.0, help="Plan centerline simplification tolerance")
@@ -118,6 +146,7 @@ def main_cli() -> int:
             obj_segments=args.obj_segments,
             cap_ends=not args.no_caps,
             object_name=args.object_name,
+            use_gemini_plan=args.use_gemini_plan,
         )
     except Exception as exc:
         print(f"Error: {exc}", file=sys.stderr)
