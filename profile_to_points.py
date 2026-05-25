@@ -99,6 +99,16 @@ def strong_mask(gray: np.ndarray, threshold: int = 170) -> np.ndarray:
     return cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY_INV)[1]
 
 
+def red_line_mask(bgr: np.ndarray) -> np.ndarray:
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    lower_red = cv2.inRange(hsv, np.array([0, 50, 50]), np.array([12, 255, 255]))
+    upper_red = cv2.inRange(hsv, np.array([168, 50, 50]), np.array([179, 255, 255]))
+    mask = cv2.bitwise_or(lower_red, upper_red)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9)))
+    return mask
+
+
 def grouped_positions(projection: np.ndarray, minimum: float) -> list[int]:
     positions: list[int] = []
     in_run = False
@@ -422,6 +432,35 @@ def centerline_from_mask(mask: np.ndarray, max_gap: int = 90) -> list[tuple[floa
     return median_smooth(interpolated, window=17, height=h)
 
 
+def centerline_from_red_mask(mask: np.ndarray, minimum_pixels: int = 100) -> list[tuple[float, float]]:
+    if np.count_nonzero(mask) < minimum_pixels:
+        raise ValueError("Red profile line has too few pixels")
+
+    h, w = mask.shape
+    points: list[tuple[float, float]] = []
+    for x in range(w):
+        ys = np.flatnonzero(mask[:, x])
+        if len(ys) == 0:
+            continue
+        points.append((float(x), float(np.median(ys))))
+
+    if len(points) < 2:
+        raise ValueError("Red profile line has too few columns")
+
+    interpolated: list[tuple[float, float]] = []
+    for current, nxt in zip(points, points[1:]):
+        interpolated.append(current)
+        gap = int(nxt[0] - current[0])
+        if 1 < gap <= 90:
+            for step in range(1, gap):
+                ratio = step / gap
+                y = current[1] + (nxt[1] - current[1]) * ratio
+                interpolated.append((current[0] + step, y))
+    interpolated.append(points[-1])
+
+    return median_smooth(interpolated, window=25, height=h)
+
+
 def column_candidates(column: np.ndarray) -> list[tuple[float, float, int]]:
     ys = np.flatnonzero(column)
     if len(ys) == 0:
@@ -636,20 +675,29 @@ def draw_overlay(
 
 
 def parse_profile_image(image_path: Path, debug_dir: Path | None, epsilon: float) -> dict:
-    image, gray = load_image(image_path)
+    source_image, gray = load_image(image_path)
+    red_mask_full = red_line_mask(source_image)
+    image = source_image
     image, gray = enhance_profile_contrast(image, gray)
     bounds = find_plot_bounds(gray)
     x0, y0, w, h = bounds
     crop_gray = gray[y0 : y0 + h, x0 : x0 + w]
+    red_mask = red_mask_full[y0 : y0 + h, x0 : x0 + w]
 
     tokens = ocr_tokens(image)
     x_calibration = calibrate_x(tokens, bounds)
     y_calibration = calibrate_y(tokens, bounds)
 
     grid, grid_rows, grid_cols = detect_grid(crop_gray)
-    line, closed = extract_line_mask(crop_gray, grid, tokens, bounds)
-    selected = choose_target_component(line, closed)
-    centerline = trace_centerline(line, selected)
+    if np.count_nonzero(red_mask) >= 100:
+        line = red_mask
+        closed = red_mask
+        selected = red_mask
+        centerline = centerline_from_red_mask(red_mask)
+    else:
+        line, closed = extract_line_mask(crop_gray, grid, tokens, bounds)
+        selected = choose_target_component(line, closed)
+        centerline = trace_centerline(line, selected)
     simplified = rdp(centerline, epsilon=epsilon)
 
     result = build_result(image_path, simplified, bounds, x_calibration, y_calibration)

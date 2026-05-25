@@ -13,6 +13,7 @@ class PipeJsonToObjTest(unittest.TestCase):
         self.assertEqual(len(vertices), 26)
         self.assertEqual(len(faces), 32)
 
+    @unittest.skipUnless(Path("assets/pipe_3d.json").exists(), "requires assets/pipe_3d.json fixture")
     def test_convert_current_pipe_json(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "pipe.obj"

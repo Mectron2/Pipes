@@ -16,6 +16,24 @@ class ProfileParserTest(unittest.TestCase):
         labels = profile_to_points.interpolated_station_labels(["0+00", "2+00", "4+00", "5+00"])
         self.assertEqual(labels, ["0+00", "1+00", "2+00", "3+00", "4+00", "5+00"])
 
+    def test_centerline_from_red_mask(self):
+        try:
+            import cv2
+            import numpy as np
+        except ModuleNotFoundError as exc:
+            self.skipTest(f"missing dependency: {exc.name}")
+
+        mask = np.zeros((20, 30), dtype=np.uint8)
+        cv2.line(mask, (0, 15), (29, 5), 255, 3)
+        centerline = profile_to_points.centerline_from_red_mask(mask, minimum_pixels=10)
+
+        self.assertGreaterEqual(len(centerline), 25)
+        self.assertLess(centerline[0][1], 17)
+        self.assertGreater(centerline[0][1], 12)
+        self.assertLess(centerline[-1][1], 8)
+        self.assertGreater(centerline[-1][1], 3)
+
+    @unittest.skipUnless(Path("assets/pipe.png").exists(), "requires assets/pipe.png fixture")
     def test_pipe_profile_smoke(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "points.json"

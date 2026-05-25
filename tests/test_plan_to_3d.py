@@ -34,6 +34,10 @@ class PlanTo3DTest(unittest.TestCase):
         self.assertEqual([point["y_ft"] for point in result["points"]], [0.0, 0.0, 0.0])
         self.assertEqual([point["z_ft"] for point in result["points"]], [100.0, 105.0, 110.0])
 
+    @unittest.skipUnless(
+        Path("assets/img.png").exists() and Path("assets/points.json").exists(),
+        "requires assets/img.png and assets/points.json fixtures",
+    )
     def test_img_smoke(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             output = Path(tmpdir) / "pipe_3d.json"

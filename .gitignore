@@ -2,3 +2,5 @@ assets
 .venv
 .idea
 .env
+__pycache__/
+tests/__pycache__/
