@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 
 import numpy as np
@@ -9,6 +10,56 @@ import pipeline
 
 
 class PipelineTest(unittest.TestCase):
+    def test_next_run_dir_uses_next_numeric_suffix(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir) / "assets" / "runs"
+            (runs_dir / "run_1").mkdir(parents=True)
+            (runs_dir / "run_7").mkdir()
+            (runs_dir / "run_draft").mkdir()
+
+            self.assertEqual(pipeline.next_run_dir(runs_dir), runs_dir / "run_8")
+
+    def test_resolve_cli_paths_defaults_to_run_debug_pipeline(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            runs_dir = Path(tmpdir) / "assets" / "runs"
+            (runs_dir / "run_1").mkdir(parents=True)
+            args = SimpleNamespace(
+                runs_dir=runs_dir,
+                run_dir=None,
+                profile_json=None,
+                pipe_3d_json=None,
+                obj=None,
+                debug_dir=None,
+            )
+
+            resolved = pipeline.resolve_cli_paths(args)
+
+            self.assertEqual(resolved.run_dir, runs_dir / "run_2")
+            self.assertEqual(resolved.profile_json, runs_dir / "run_2" / "points.json")
+            self.assertEqual(resolved.pipe_3d_json, runs_dir / "run_2" / "pipe_3d.json")
+            self.assertEqual(resolved.obj, runs_dir / "run_2" / "pipe.obj")
+            self.assertEqual(resolved.debug_dir, runs_dir / "run_2" / "debug-pipeline")
+
+    def test_resolve_cli_paths_keeps_explicit_paths(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            args = SimpleNamespace(
+                runs_dir=tmp / "runs",
+                run_dir=tmp / "custom-run",
+                profile_json=tmp / "profile.json",
+                pipe_3d_json=tmp / "pipe.json",
+                obj=tmp / "pipe.obj",
+                debug_dir=tmp / "debug",
+            )
+
+            resolved = pipeline.resolve_cli_paths(args)
+
+            self.assertEqual(resolved.run_dir, tmp / "custom-run")
+            self.assertEqual(resolved.profile_json, tmp / "profile.json")
+            self.assertEqual(resolved.pipe_3d_json, tmp / "pipe.json")
+            self.assertEqual(resolved.obj, tmp / "pipe.obj")
+            self.assertEqual(resolved.debug_dir, tmp / "debug")
+
     def test_full_pipeline_smoke(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)

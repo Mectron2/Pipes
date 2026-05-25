@@ -15,12 +15,35 @@ from logger import setup_logging
 
 FEET_TO_MILLIMETERS = 304.8
 
+DEFAULT_INPUT_DIR = Path("input")
+DEFAULT_RUNS_DIR = Path("assets/runs")
+
 
 def debug_subdir(debug_dir: Path | None, name: str) -> Path | None:
     if debug_dir is None:
         return None
     return debug_dir / name
 
+def next_run_dir(runs_dir: Path) -> Path:
+    max_run_number = 0
+    if runs_dir.exists():
+        for path in runs_dir.iterdir():
+            if not path.is_dir() or not path.name.startswith("run_"):
+                continue
+            suffix = path.name.removeprefix("run_")
+            if suffix.isdigit():
+                max_run_number = max(max_run_number, int(suffix))
+    return runs_dir / f"run_{max_run_number + 1}"
+
+
+def resolve_cli_paths(args: argparse.Namespace) -> argparse.Namespace:
+    run_dir = args.run_dir if args.run_dir is not None else next_run_dir(args.runs_dir)
+    args.run_dir = run_dir
+    args.profile_json = args.profile_json if args.profile_json is not None else run_dir / "points.json"
+    args.pipe_3d_json = args.pipe_3d_json if args.pipe_3d_json is not None else run_dir / "pipe_3d.json"
+    args.obj = args.obj if args.obj is not None else run_dir / "pipe.obj"
+    args.debug_dir = args.debug_dir if args.debug_dir is not None else run_dir / "debug-pipeline"
+    return args
 
 def prepare_plan_image(
     plan_image: Path,
@@ -135,7 +158,6 @@ def run_pipeline(
         "csv": csv_rows,
     }
 
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run the full pipe pipeline: profile image -> 3D pipe JSON -> Blender OBJ mesh."
@@ -144,12 +166,14 @@ def parse_args() -> argparse.Namespace:
         "--profile-image",
         nargs="+",
         type=Path,
-        default=[Path("assets/pipe.png")],
+        default=[DEFAULT_INPUT_DIR / "pipe.png"],
         help="Side/profile image(s), in route order",
     )
-    parser.add_argument("--plan-image", type=Path, default=Path("assets/img.png"), help="Plan image with red pipe")
-    parser.add_argument("--profile-json", type=Path, default=Path("assets/points.json"), help="Intermediate profile JSON")
-    parser.add_argument("--pipe-3d-json", type=Path, default=Path("assets/pipe_3d.json"), help="Intermediate 3D JSON")
+    parser.add_argument("--plan-image", type=Path, default=DEFAULT_INPUT_DIR / "img.png", help="Plan image with red pipe")
+    parser.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR, help="Directory containing run_N output folders")
+    parser.add_argument("--run-dir", type=Path, default=None, help="Specific run output directory")
+    parser.add_argument("--profile-json", type=Path, default=None, help="Intermediate profile JSON")
+    parser.add_argument("--pipe-3d-json", type=Path, default=None, help="Intermediate 3D JSON")
     parser.add_argument("--obj", type=Path, default=Path("assets/pipe.obj"), help="Final Blender-importable OBJ")
     parser.add_argument(
         "--csv-output",
@@ -179,10 +203,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--object-name", default="pipe", help="OBJ object name")
     return parser.parse_args()
 
-
 def main_cli() -> int:
     setup_logging()
-    args = parse_args()
+    args = resolve_cli_paths(parse_args())
     try:
         summary = run_pipeline(
             profile_image=args.profile_image,
