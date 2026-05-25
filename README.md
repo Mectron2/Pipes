@@ -43,6 +43,17 @@ Run all steps with one command:
   --debug-dir assets/debug-pipeline
 ```
 
+If the plan drawing is not already highlighted in red, let Gemini mark the pipe route first:
+
+```bash
+.venv/bin/python pipeline.py \
+  --profile-image assets/pipe.png \
+  --plan-image assets/raw-plan.png \
+  --diameter-ft 0.5 \
+  --debug-dir assets/debug-pipeline \
+  --use-gemini-plan
+```
+
 Default outputs:
 
 - `assets/points.json` - profile station/elevation points
