@@ -1,4 +1,5 @@
 import argparse
+import heapq
 import json
 import math
 import re
@@ -640,166 +641,182 @@ def extract_line_mask(
     return line, closed
 
 
-def choose_target_component(line: np.ndarray, closed: np.ndarray) -> np.ndarray:
-    count, labels, stats, centroids = cv2.connectedComponentsWithStats(closed, connectivity=8)
-    h, w = closed.shape
-    best_label = None
-    best_score = -float("inf")
+WHITE_THRESHOLD = 127
 
-    for label in range(1, count):
-        x, y, bw, bh, area = stats[label]
-        if area < 250 or bw < w * 0.25:
+
+def is_white(image: np.ndarray, x: int, y: int) -> bool:
+    return image[y, x] > WHITE_THRESHOLD
+
+
+def resize_image(image: np.ndarray, scale: float = 0.25) -> np.ndarray:
+    if not 0 < scale <= 1:
+        raise ValueError("scale must be in [0, 1]")
+
+    if scale == 1:
+        return image.copy()
+
+    resized = cv2.resize(
+        image,
+        None,
+        fx=scale,
+        fy=scale,
+        interpolation=cv2.INTER_NEAREST
+    )
+
+    return resized
+
+
+def get_neighbors(x: int, y: int, width: int, height: int):
+    directions = [
+        (-1, -1), (0, -1), (1, -1),
+        (-1,  0),          (1,  0),
+        (-1,  1), (0,  1), (1,  1),
+    ]
+
+    for dx, dy in directions:
+        nx = x + dx
+        ny = y + dy
+
+        if 0 <= nx < width and 0 <= ny < height:
+            yield nx, ny
+
+
+def step_cost(image: np.ndarray, current, neighbor):
+    x1, y1 = current
+    x2, y2 = neighbor
+
+    current_white = is_white(image, x1, y1)
+    neighbor_white = is_white(image, x2, y2)
+
+    cost = 1
+
+    if not neighbor_white:
+        cost += 50
+
+    if current_white and not neighbor_white:
+        cost += 200
+
+    return cost
+
+
+def add_cost(a, b):
+    return a + b
+
+
+def find_left_right_path(image: np.ndarray):
+    height, width = image.shape[:2]
+
+    left_margin = max(1, int(width * 0.02))
+    right_margin = int(width * 0.98)
+
+    starts = []
+    goals = set()
+
+    for y in range(height):
+        for x in range(left_margin):
+            if is_white(image, x, y):
+                starts.append((int(x), int(y)))
+
+    for y in range(height):
+        for x in range(right_margin, width):
+            if is_white(image, x, y):
+                goals.add((int(x), int(y)))
+
+    if not starts:
+        return None, None
+
+    if not goals:
+        return None, None
+
+    dist = {}
+    parent = {}
+    queue = []
+
+    for start in starts:
+        dist[start] = 0
+        parent[start] = None
+        heapq.heappush(queue, (0, start))
+
+    final_goal = None
+
+    while queue:
+        current_cost, current = heapq.heappop(queue)
+
+        if current_cost != dist.get(current, math.inf):
             continue
 
-        component = labels == label
-        col_coverage = np.count_nonzero(np.count_nonzero(component, axis=0)) / max(1, bw)
-        original_overlap = np.count_nonzero(line[component])
-        density = original_overlap / max(1, area)
-        mean_y = centroids[label][1] / max(1, h)
+        if current in goals:
+            final_goal = current
+            break
 
-        score = bw * 1.2 + col_coverage * 700 + density * 450 + mean_y * 250 - bh * 0.45
-        if score > best_score:
-            best_score = score
-            best_label = label
+        x, y = current
 
-    if best_label is None:
-        raise ValueError("Could not find a long candidate for the force main line")
+        for neighbor in get_neighbors(x, y, width, height):
+            new_cost = add_cost(
+                current_cost,
+                step_cost(image, current, neighbor)
+            )
 
-    selected_closed = np.where(labels == best_label, 255, 0).astype(np.uint8)
-    selected_band = cv2.dilate(selected_closed, cv2.getStructuringElement(cv2.MORPH_RECT, (5, 13)), iterations=1)
-    selected = cv2.bitwise_and(line, selected_band)
+            if new_cost < dist.get(neighbor, math.inf):
+                dist[neighbor] = new_cost
+                parent[neighbor] = current
+                heapq.heappush(queue, (new_cost, neighbor))
 
-    if np.count_nonzero(selected) < 100:
-        return selected_closed
-    return selected
+    if final_goal is None:
+        return None, None
 
+    path = []
+    node = final_goal
 
-def centerline_from_mask(mask: np.ndarray, max_gap: int = 90) -> list[tuple[float, float]]:
-    h, w = mask.shape
-    points: list[tuple[float, float]] = []
+    while node is not None:
+        path.append(node)
+        node = parent[node]
 
-    for x in range(w):
-        ys = np.flatnonzero(mask[:, x])
-        if len(ys) == 0:
-            continue
-        points.append((float(x), float(np.median(ys))))
+    path.reverse()
 
-    if len(points) < 2:
-        raise ValueError("Selected line has too few pixels")
-
-    interpolated: list[tuple[float, float]] = []
-    for current, nxt in zip(points, points[1:]):
-        interpolated.append(current)
-        gap = int(nxt[0] - current[0])
-        if 1 < gap <= max_gap:
-            for step in range(1, gap):
-                ratio = step / gap
-                y = current[1] + (nxt[1] - current[1]) * ratio
-                interpolated.append((current[0] + step, y))
-    interpolated.append(points[-1])
-
-    return median_smooth(interpolated, window=17, height=h)
+    return path, dist[final_goal]
 
 
-def column_candidates(column: np.ndarray) -> list[tuple[float, float, int]]:
-    ys = np.flatnonzero(column)
-    if len(ys) == 0:
-        return []
+def scale_path_to_original(path, scale: float):
+    if path is None:
+        return None
 
-    runs: list[tuple[int, int]] = []
-    start = int(ys[0])
-    previous = int(ys[0])
-    for y in ys[1:]:
-        y = int(y)
-        if y == previous + 1:
-            previous = y
-            continue
-        runs.append((start, previous))
-        start = y
-        previous = y
-    runs.append((start, previous))
+    original_path = []
 
-    compact = []
-    for top, bottom in runs:
-        height = bottom - top + 1
-        if height <= 45:
-            compact.append((top, bottom, height))
+    for x, y in path:
+        original_x = float(x / scale)
+        original_y = float(y / scale)
+        original_path.append((original_x, original_y))
 
-    candidates: list[tuple[float, float, int]] = []
-    i = 0
-    while i < len(compact):
-        top, bottom, weight = compact[i]
-        j = i + 1
-        while j < len(compact) and compact[j][0] - bottom <= 22:
-            bottom = compact[j][1]
-            weight += compact[j][2]
-            j += 1
-
-        span = bottom - top + 1
-        if span <= 55:
-            candidates.append(((top + bottom) / 2, float(span), weight))
-        i = j
-
-    return candidates
+    return original_path
 
 
-def seed_from_mask(seed_mask: np.ndarray) -> tuple[int, float]:
-    cols = np.flatnonzero(np.count_nonzero(seed_mask, axis=0))
-    if len(cols) == 0:
-        raise ValueError("Could not seed line tracker")
-
-    for x in cols:
-        ys = np.flatnonzero(seed_mask[:, x])
-        if len(ys):
-            return int(x), float(np.median(ys))
-
-    raise ValueError("Could not seed line tracker")
-
-
-def trace_centerline(line: np.ndarray, seed_mask: np.ndarray, max_gap: int = 100) -> list[tuple[float, float]]:
+def trace_centerline(line: np.ndarray, max_gap: int = 100) -> list[tuple[float, float]]:
+    scale = 0.25
     h, w = line.shape
-    seed_x, seed_y = seed_from_mask(seed_mask)
-
-    def trace_direction(start_x: int, start_y: float, step: int) -> list[tuple[float, float]]:
-        traced: list[tuple[float, float]] = []
-        previous_y = start_y
-        gap = 0
-        x = start_x
-
-        while 0 <= x < w:
-            candidates = column_candidates(line[:, x])
-            chosen = None
-            if candidates:
-                max_jump = 28 + min(gap, 50) * 0.6
-                scored = [
-                    (abs(center - previous_y) - weight * 0.18, center, weight)
-                    for center, _, weight in candidates
-                    if abs(center - previous_y) <= max_jump
-                ]
-                if scored:
-                    _, chosen, _ = min(scored, key=lambda item: item[0])
-
-            if chosen is not None:
-                traced.append((float(x), float(chosen)))
-                previous_y = float(chosen)
-                gap = 0
-            else:
-                gap += 1
-                if gap > max_gap:
-                    break
-
-            x += step
-
-        return traced
-
-    left = trace_direction(seed_x, seed_y, -1)
-    right = trace_direction(seed_x + 1, seed_y, 1)
-    points = list(reversed(left)) + right
-    if len(points) < 2:
-        raise ValueError("Line tracker produced too few points")
+    
+    small_image = resize_image(line, scale=scale)
+    
+    path_small, _ = find_left_right_path(small_image)
+    if path_small is None:
+        raise ValueError("Could not find a path from left to right")
+        
+    path_original = scale_path_to_original(path_small, scale)
+    if path_original is None or not path_original:
+        raise ValueError("Original path is empty")
+        
+    monotonic_path = []
+    last_x = -1
+    for px, py in path_original:
+        if px > last_x:
+            monotonic_path.append((px, py))
+            last_x = px
+            
+    if not monotonic_path:
+        raise ValueError("Path is empty after monotonic filter")
 
     interpolated: list[tuple[float, float]] = []
-    for current, nxt in zip(points, points[1:]):
+    for current, nxt in zip(monotonic_path, monotonic_path[1:]):
         interpolated.append(current)
         gap = int(nxt[0] - current[0])
         if 1 < gap <= max_gap:
@@ -807,7 +824,7 @@ def trace_centerline(line: np.ndarray, seed_mask: np.ndarray, max_gap: int = 100
                 ratio = offset / gap
                 y = current[1] + (nxt[1] - current[1]) * ratio
                 interpolated.append((current[0] + offset, y))
-    interpolated.append(points[-1])
+    interpolated.append(monotonic_path[-1])
 
     return median_smooth(interpolated, window=25, height=h)
 
@@ -955,8 +972,7 @@ def parse_profile_image(image_path: Path, debug_dir: Path | None, epsilon: float
 
     grid, grid_rows, grid_cols = detect_grid(image_without_text)
     line, closed = extract_line_mask(image_without_text, grid, tokens, bounds)
-    selected = choose_target_component(line, closed)
-    centerline = trace_centerline(line, selected)
+    centerline = trace_centerline(line)
     simplified = rdp(centerline, epsilon=epsilon)
 
     result = build_result(image_path, simplified, bounds, x_calibration, y_calibration)
@@ -966,7 +982,6 @@ def parse_profile_image(image_path: Path, debug_dir: Path | None, epsilon: float
     write_debug(debug_dir, "02_grid_mask.png", grid)
     write_debug(debug_dir, "03_line_mask.png", line)
     write_debug(debug_dir, "04_closed_candidates.png", closed)
-    write_debug(debug_dir, "05_selected_line.png", selected)
     write_debug(debug_dir, "06_overlay.png", draw_overlay(image, bounds, grid, centerline, simplified))
 
     if debug_dir:
