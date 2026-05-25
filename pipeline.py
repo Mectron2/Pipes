@@ -1,11 +1,13 @@
 import argparse
 import json
+import logging
 import sys
 from pathlib import Path
 
 import profile_to_points as profile_parser
 import pipe_json_to_obj
 import plan_to_3d
+from logger import setup_logging
 
 
 def debug_subdir(debug_dir: Path | None, name: str) -> Path | None:
@@ -130,6 +132,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main_cli() -> int:
+    setup_logging()
     args = parse_args()
     try:
         summary = run_pipeline(
@@ -149,16 +152,16 @@ def main_cli() -> int:
             use_gemini_plan=args.use_gemini_plan,
         )
     except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+        logging.getLogger(__name__).exception("Pipeline failed")
         return 1
 
-    print("Pipeline complete")
-    print(f"Profile points: {summary['profile_points']}")
-    print(f"3D points: {summary['pipe_3d_points']}")
-    print(f"OBJ vertices: {summary['obj_vertices']}, faces: {summary['obj_faces']}")
-    print(f"OBJ saved to: {summary['outputs']['obj']}")
+    logging.getLogger(__name__).info("Pipeline complete")
+    logging.getLogger(__name__).info("Profile points: %d", summary["profile_points"])
+    logging.getLogger(__name__).info("3D points: %d", summary["pipe_3d_points"])
+    logging.getLogger(__name__).info("OBJ vertices: %d, faces: %d", summary["obj_vertices"], summary["obj_faces"])
+    logging.getLogger(__name__).info("OBJ saved to: %s", summary["outputs"]["obj"])
     if args.debug_dir:
-        print(f"Debug saved to: {args.debug_dir}")
+        logging.getLogger(__name__).info("Debug saved to: %s", args.debug_dir)
     return 0
 
 

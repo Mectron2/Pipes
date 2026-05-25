@@ -3,6 +3,7 @@ import heapq
 import json
 import math
 import sys
+import logging
 from pathlib import Path
 
 try:
@@ -19,6 +20,7 @@ except ModuleNotFoundError as exc:
     raise SystemExit(2) from exc
 
 import profile_to_points
+from logger import setup_logging
 
 
 Point = tuple[float, float]
@@ -351,16 +353,17 @@ def parse_args() -> argparse.Namespace:
 
 
 def main_cli() -> int:
+    setup_logging()
     args = parse_args()
     try:
         result = build_pipe_3d(args.plan_image, args.profile, args.out, args.debug_dir, args.sample_ft, args.simplify_px)
     except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+        logging.getLogger(__name__).exception("Error building 3D pipe JSON")
         return 1
 
-    print(f"Saved {len(result['points'])} 3D points to {args.out}")
+    logging.getLogger(__name__).info("Saved %d 3D points to %s", len(result["points"]), args.out)
     if args.debug_dir:
-        print(f"Debug artifacts saved to {args.debug_dir}")
+        logging.getLogger(__name__).info("Debug artifacts saved to %s", args.debug_dir)
     return 0
 
 

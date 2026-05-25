@@ -1,19 +1,22 @@
 import argparse
 import os
 import sys
+import logging
 from pathlib import Path
 import cv2
 import numpy as np
 from PIL import Image
 from google import genai
+from logger import setup_logging
 
 def highlight_force_main(image_path: Path, output_path: Path) -> bool:
+    logger = logging.getLogger(__name__)
     """
     Sends the plan image to Gemini 3.1 Flash Image Preview to highlight the FORCE MAIN line in red.
     Saves the image where the red line is drawn.
     """
     if not os.environ.get("GEMINI_API_KEY"):
-        print("Error: GEMINI_API_KEY environment variable is missing.", file=sys.stderr)
+        logger.error("GEMINI_API_KEY environment variable is missing.")
         return False
 
     image_bgr = cv2.imread(str(image_path))
@@ -33,17 +36,17 @@ def highlight_force_main(image_path: Path, output_path: Path) -> bool:
         "Note that the pipe runs continuously from one boundary to the other. Do not break the line between them."
     )
     
-    print("Calling Gemini 3.1 Flash Image Preview...")
+    logger.info("Calling Gemini 3.1 Flash Image Preview...")
     try:
         response = client.models.generate_content(
             model='gemini-3.1-flash-image-preview',
             contents=[pil_image, prompt]
         )
     except Exception as e:
-        print(f"Error calling Gemini API: {e}", file=sys.stderr)
+        logger.exception("Error calling Gemini API")
         return False
-        
-    print("Received response from Gemini. Extracting image...")
+    
+    logger.info("Received response from Gemini. Extracting image...")
     
     # Extract the image from the response parts
     for candidate in response.candidates:
@@ -67,10 +70,11 @@ def highlight_force_main(image_path: Path, output_path: Path) -> bool:
                     cv2.imwrite(str(output_path), img)
                     return True
                     
-    print("Error: Gemini response did not contain any valid image data.", file=sys.stderr)
+    logger.error("Gemini response did not contain any valid image data.")
     return False
 
 def main() -> int:
+    setup_logging()
     parser = argparse.ArgumentParser(description="Use Gemini to automatically highlight the FORCE MAIN line in red on a plan drawing.")
     parser.add_argument("input_image", type=Path, help="Input plan drawing image (without red line)")
     parser.add_argument("output_image", type=Path, help="Output image path to save the red-highlighted drawing")
@@ -79,8 +83,8 @@ def main() -> int:
     
     success = highlight_force_main(args.input_image, args.output_image)
     if success:
-        print(f"Successfully saved highlighted image to {args.output_image}")
-        print("You can now pass this image directly to plan_to_3d.py!")
+        logging.getLogger(__name__).info("Successfully saved highlighted image to %s", args.output_image)
+        logging.getLogger(__name__).info("You can now pass this image directly to plan_to_3d.py!")
         return 0
     return 1
 

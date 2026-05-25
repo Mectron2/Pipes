@@ -2,7 +2,9 @@ import argparse
 import json
 import math
 import sys
+import logging
 from pathlib import Path
+from logger import setup_logging
 
 
 Vec3 = tuple[float, float, float]
@@ -196,6 +198,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main_cli() -> int:
+    setup_logging()
     args = parse_args()
     try:
         vertex_count, face_count = convert_json_to_obj(
@@ -207,11 +210,11 @@ def main_cli() -> int:
             args.object_name,
         )
     except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+        logging.getLogger(__name__).exception("Error converting JSON to OBJ")
         return 1
 
-    print(f"Saved OBJ to {args.out}")
-    print(f"Vertices: {vertex_count}, faces: {face_count}")
+    logging.getLogger(__name__).info("Saved OBJ to %s", args.out)
+    logging.getLogger(__name__).info("Vertices: %d, faces: %d", vertex_count, face_count)
     return 0
 
 
