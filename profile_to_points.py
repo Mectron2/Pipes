@@ -639,9 +639,6 @@ def extract_line_mask(
     closed = cv2.morphologyEx(line, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (35, 5)))
     closed = cv2.dilate(closed, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
 
-    # Clear borders to remove plot bounding box artifacts
-    cv2.rectangle(line, (0, 0), (w - 1, h - 1), 0, 5)
-    
     return line, closed
 
 
@@ -1026,7 +1023,7 @@ def parse_profile_image(image_path: Path, debug_dir: Path | None, epsilon: float
 
     grid, grid_rows, grid_cols = detect_grid(image_without_text)
     line, closed = extract_line_mask(image_without_text, grid, tokens, bounds)
-    centerline = trace_centerline(line)
+    centerline = trace_centerline(closed)
     simplified = rdp(centerline, epsilon=epsilon)
 
     result = build_result(image_path, simplified, bounds, x_calibration, y_calibration)
@@ -1045,6 +1042,7 @@ def parse_profile_image(image_path: Path, debug_dir: Path | None, epsilon: float
             "grid_cols": grid_cols,
             "ocr_tokens": [token.__dict__ for token in tokens],
             "crop_ocr_tokens": [token.__dict__ for token in image_text],
+            "points": result.get("points", []),
         }
         (debug_dir / "debug.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
