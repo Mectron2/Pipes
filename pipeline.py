@@ -1,11 +1,11 @@
 import argparse
 import json
 import logging
-import sys
 from pathlib import Path
 
 import profile_to_points as profile_parser
 import pipe_json_to_obj
+import pipe_top_side_csv
 import plan_to_3d
 from logger import setup_logging
 
@@ -47,6 +47,9 @@ def run_pipeline(
     obj_segments: int,
     cap_ends: bool,
     object_name: str,
+    csv_output: Path | None = None,
+    pipe_od_mm: float | None = None,
+    csv_bend_angle_degrees: float = 10.0,
     use_gemini_plan: bool = False,
 ) -> dict:
     profile_images = profile_image if isinstance(profile_image, list) else [profile_image]
@@ -73,6 +76,15 @@ def run_pipeline(
         cap_ends,
         object_name,
     )
+    csv_rows = []
+    if csv_output is not None:
+        csv_pipe_od_mm = pipe_od_mm if pipe_od_mm is not None else diameter_ft * 304.8
+        csv_rows = pipe_top_side_csv.write_top_side_csv(
+            pipe_3d,
+            csv_output,
+            csv_pipe_od_mm,
+            csv_bend_angle_degrees,
+        )
 
     summary = {
         "profile_image": [str(path) for path in profile_images],
@@ -85,12 +97,15 @@ def run_pipeline(
             "profile_json": str(profile_json),
             "pipe_3d_json": str(pipe_3d_json),
             "obj": str(obj_output),
+            "csv": str(csv_output) if csv_output else None,
         },
         "profile_points": len(profile["points"]),
         "pipe_3d_points": len(pipe_3d["points"]),
         "obj_vertices": vertex_count,
         "obj_faces": face_count,
         "diameter_ft": diameter_ft,
+        "pipe_od_mm": pipe_od_mm if pipe_od_mm is not None else diameter_ft * 304.8,
+        "csv_rows": len(csv_rows),
     }
 
     if debug_dir is not None:
@@ -115,7 +130,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--profile-json", type=Path, default=Path("assets/points.json"), help="Intermediate profile JSON")
     parser.add_argument("--pipe-3d-json", type=Path, default=Path("assets/pipe_3d.json"), help="Intermediate 3D JSON")
     parser.add_argument("--obj", type=Path, default=Path("assets/pipe.obj"), help="Final Blender-importable OBJ")
+    parser.add_argument(
+        "--csv-output",
+        type=Path,
+        default=Path("assets/pipe_baseline_top_side.csv"),
+        help="TOP/SIDE baseline CSV output path",
+    )
     parser.add_argument("--diameter-ft", type=float, required=True, help="Pipe outside diameter in feet")
+    parser.add_argument(
+        "--pipe-od-mm",
+        type=float,
+        default=None,
+        help="Pipe outside diameter in millimeters for CSV; defaults to --diameter-ft converted to mm",
+    )
     parser.add_argument("--debug-dir", type=Path, default=None, help="Root debug directory")
     parser.add_argument(
         "--use-gemini-plan",
@@ -125,6 +152,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--profile-epsilon", type=float, default=8.0, help="Profile RDP tolerance in pixels")
     parser.add_argument("--sample-ft", type=float, default=10.0, help="3D JSON sampling interval in feet")
     parser.add_argument("--plan-simplify-px", type=float, default=2.0, help="Plan centerline simplification tolerance")
+    parser.add_argument("--csv-bend-angle-degrees", type=float, default=10.0, help="Minimum CSV plan angle change marked as bend")
     parser.add_argument("--obj-segments", type=int, default=16, help="OBJ radial segments around pipe")
     parser.add_argument("--no-caps", action="store_true", help="Leave OBJ pipe ends open")
     parser.add_argument("--object-name", default="pipe", help="OBJ object name")
@@ -149,6 +177,9 @@ def main_cli() -> int:
             obj_segments=args.obj_segments,
             cap_ends=not args.no_caps,
             object_name=args.object_name,
+            csv_output=args.csv_output,
+            pipe_od_mm=args.pipe_od_mm,
+            csv_bend_angle_degrees=args.csv_bend_angle_degrees,
             use_gemini_plan=args.use_gemini_plan,
         )
     except Exception as exc:
@@ -160,8 +191,14 @@ def main_cli() -> int:
     logging.getLogger(__name__).info("3D points: %d", summary["pipe_3d_points"])
     logging.getLogger(__name__).info("OBJ vertices: %d, faces: %d", summary["obj_vertices"], summary["obj_faces"])
     logging.getLogger(__name__).info("OBJ saved to: %s", summary["outputs"]["obj"])
+
+    if summary["outputs"]["csv"]:
+        logging.getLogger(__name__).info("CSV rows: %s", summary['csv_rows'])
+        logging.getLogger(__name__).info("CSV saved to: %s", summary['outputs']['csv'])
+
     if args.debug_dir:
         logging.getLogger(__name__).info("Debug saved to: %s", args.debug_dir)
+
     return 0
 
 
