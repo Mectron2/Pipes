@@ -638,6 +638,10 @@ def extract_line_mask(
     line = cv2.morphologyEx(line, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2)))
     closed = cv2.morphologyEx(line, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (35, 5)))
     closed = cv2.dilate(closed, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
+
+    # Clear borders to remove plot bounding box artifacts
+    cv2.rectangle(line, (0, 0), (w - 1, h - 1), 0, 5)
+    
     return line, closed
 
 
@@ -650,13 +654,20 @@ def is_white(image: np.ndarray, x: int, y: int) -> bool:
 
 def resize_image(image: np.ndarray, scale: float = 0.25) -> np.ndarray:
     if not 0 < scale <= 1:
-        raise ValueError("scale must be in [0, 1]")
+        raise ValueError("scale must be in (0, 1]")
 
     if scale == 1:
         return image.copy()
 
+    kernel_size = int(1 / scale)
+    if kernel_size > 1:
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (kernel_size, kernel_size))
+        dilated = cv2.dilate(image, kernel, iterations=1)
+    else:
+        dilated = image
+
     resized = cv2.resize(
-        image,
+        dilated,
         None,
         fx=scale,
         fy=scale,
@@ -690,6 +701,9 @@ def step_cost(image: np.ndarray, current, neighbor):
 
     cost = 1
 
+    if x2 == x1:
+        cost += 10
+
     if not neighbor_white:
         cost += 50
 
@@ -706,21 +720,30 @@ def add_cost(a, b):
 def find_left_right_path(image: np.ndarray):
     height, width = image.shape[:2]
 
+    y_coords, x_coords = np.where(image > WHITE_THRESHOLD)
+    if len(x_coords) == 0:
+        raise ValueError("No white pixels found in the image")
+        
+    min_x = int(x_coords.min())
+    max_x = int(x_coords.max())
+
     left_margin = max(1, int(width * 0.02))
     right_margin = int(width * 0.98)
+    
+    if min_x > left_margin:
+        raise ValueError(f"Start candidates (x={min_x}) are not within the left 2% margin (<= {left_margin})")
+        
+    if max_x < right_margin:
+        raise ValueError(f"Goal candidates (x={max_x}) are not within the right 2% margin (>= {right_margin})")
 
     starts = []
     goals = set()
 
-    for y in range(height):
-        for x in range(left_margin):
-            if is_white(image, x, y):
-                starts.append((int(x), int(y)))
-
-    for y in range(height):
-        for x in range(right_margin, width):
-            if is_white(image, x, y):
-                goals.add((int(x), int(y)))
+    for y, x in zip(y_coords, x_coords):
+        if x == min_x:
+            starts.append((int(x), int(y)))
+        if x == max_x:
+            goals.add((int(x), int(y)))
 
     if not starts:
         return None, None
@@ -826,7 +849,8 @@ def trace_centerline(line: np.ndarray, max_gap: int = 100) -> list[tuple[float, 
                 interpolated.append((current[0] + offset, y))
     interpolated.append(monotonic_path[-1])
 
-    return median_smooth(interpolated, window=25, height=h)
+    median_filtered = median_smooth(interpolated, window=25, height=h)
+    return polynomial_smooth(median_filtered, window=51, poly_degree=3, height=h)
 
 
 def median_smooth(points: list[tuple[float, float]], window: int, height: int) -> list[tuple[float, float]]:
@@ -840,6 +864,36 @@ def median_smooth(points: list[tuple[float, float]], window: int, height: int) -
         y = float(np.median(ys[start:end]))
         smoothed.append((x, min(max(y, 0.0), float(height - 1))))
 
+    return smoothed
+
+
+def polynomial_smooth(points: list[tuple[float, float]], window: int, poly_degree: int, height: int) -> list[tuple[float, float]]:
+    if not points or len(points) < window:
+        return points
+        
+    radius = window // 2
+    xs = np.array([p[0] for p in points], dtype=np.float64)
+    ys = np.array([p[1] for p in points], dtype=np.float64)
+    
+    smoothed_ys = np.copy(ys)
+    
+    for i in range(len(points)):
+        start = max(0, i - radius)
+        end = min(len(points), i + radius + 1)
+        
+        if end - start < poly_degree + 1:
+            continue
+            
+        local_xs = xs[start:end]
+        local_ys = ys[start:end]
+        
+        coeffs = np.polyfit(local_xs, local_ys, poly_degree)
+        smoothed_ys[i] = np.polyval(coeffs, xs[i])
+        
+    smoothed = []
+    for x, y in zip(xs, smoothed_ys):
+        smoothed.append((float(x), min(max(float(y), 0.0), float(height - 1))))
+        
     return smoothed
 
 
