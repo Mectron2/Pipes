@@ -4,6 +4,7 @@ import json
 import math
 import re
 import sys
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,6 +20,8 @@ except ModuleNotFoundError as exc:
         file=sys.stderr,
     )
     raise SystemExit(2) from exc
+
+from logger import setup_logging
 
 
 STATION_RE = re.compile(r"^(\d+)\+(\d{1,2})$")
@@ -1160,16 +1163,17 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    setup_logging()
     args = parse_args()
     try:
         result = parse_profiles(args.images, args.out, args.debug_dir, args.epsilon)
     except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+        logging.getLogger(__name__).exception("Error parsing profile images")
         return 1
 
-    print(f"Saved {len(result['points'])} points to {args.out}")
+    logging.getLogger(__name__).info("Saved %d points to %s", len(result["points"]), args.out)
     if args.debug_dir:
-        print(f"Debug artifacts saved to {args.debug_dir}")
+        logging.getLogger(__name__).info("Debug artifacts saved to %s", args.debug_dir)
     return 0
 
 
