@@ -8,13 +8,13 @@ import pipeline
 
 
 class PipelineTest(unittest.TestCase):
-    @patch("pipeline.gemini_image_edit.edit_profile_image")
-    @patch("pipeline.gemini_image_edit.edit_plan_image")
+    @patch("pipeline.gemini_image_edit.edit_profile_image_async")
+    @patch("pipeline.gemini_image_edit.edit_plan_image_async")
     def test_full_pipeline_smoke(self, edit_plan_image, edit_profile_image):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
 
-            def fake_gemini_edit(input_image, output_image, model):
+            async def fake_gemini_edit(input_image, output_image, model):
                 output_image.parent.mkdir(parents=True, exist_ok=True)
                 copyfile(input_image, output_image)
                 return output_image
