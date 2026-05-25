@@ -37,38 +37,39 @@ Run all steps with one command:
 
 ```bash
 .venv/bin/python pipeline.py \
-  --profile-image assets/pipe.png \
-  --plan-image assets/img.png \
-  --diameter-ft 0.5 \
-  --debug-dir assets/debug-pipeline
+  --profile-image input/pipe.png \
+  --plan-image input/img.png \
+  --diameter-ft 0.5
 ```
 
 If the plan drawing is not already highlighted in red, let Gemini mark the pipe route first:
 
 ```bash
 .venv/bin/python pipeline.py \
-  --profile-image assets/pipe.png \
-  --plan-image assets/raw-plan.png \
+  --profile-image input/pipe.png \
+  --plan-image input/raw-plan.png \
   --diameter-ft 0.5 \
-  --debug-dir assets/debug-pipeline \
   --use-gemini-plan
 ```
 
 Default outputs:
 
-- `assets/points.json` - profile station/elevation points
-- `assets/pipe_3d.json` - 3D pipe polyline
-- `assets/pipe.obj` - Blender-importable tube mesh
-- `assets/debug-pipeline/` - debug masks, overlays, and summary
+- `input/` - source profile and plan images
+- `assets/runs/run_N/points.json` - profile station/elevation points
+- `assets/runs/run_N/pipe_3d.json` - 3D pipe polyline
+- `assets/runs/run_N/pipe.obj` - Blender-importable tube mesh
+- `assets/runs/run_N/debug-pipeline/` - debug masks, overlays, and summary
+
+Each CLI run uses the next numeric run folder under `assets/runs/`, for example `run_1`, `run_2`, then `run_3`.
+Pass `--run-dir assets/runs/run_custom` to write to a specific run directory.
 
 Multiple side/profile drawings are supported. Pass them in route order:
 
 ```bash
 .venv/bin/python pipeline.py \
-  --profile-image assets/profile_01.png assets/profile_02.png \
-  --plan-image assets/img.png \
-  --diameter-ft 0.5 \
-  --debug-dir assets/debug-pipeline
+  --profile-image input/profile_01.png input/profile_02.png \
+  --plan-image input/img.png \
+  --diameter-ft 0.5
 ```
 
 The end station of one profile is treated as the start station of the next profile. The first point of each following profile is skipped to avoid duplicating the joint.
@@ -78,7 +79,7 @@ The end station of one profile is treated as the start station of the next profi
 ### 1. Parse Side/Profile Drawing
 
 ```bash
-.venv/bin/python profile_to_points.py assets/pipe.png \
+.venv/bin/python profile_to_points.py input/pipe.png \
   --out assets/points.json \
   --debug-dir assets/debug-profile \
   --epsilon 8
@@ -87,7 +88,7 @@ The end station of one profile is treated as the start station of the next profi
 Multiple profiles:
 
 ```bash
-.venv/bin/python profile_to_points.py assets/profile_01.png assets/profile_02.png \
+.venv/bin/python profile_to_points.py input/profile_01.png input/profile_02.png \
   --out assets/points.json \
   --debug-dir assets/debug-profile
 ```
@@ -108,7 +109,7 @@ What it does:
 ### 2. Build 3D Polyline From Plan View
 
 ```bash
-.venv/bin/python plan_to_3d.py assets/img.png \
+.venv/bin/python plan_to_3d.py input/img.png \
   --profile assets/points.json \
   --out assets/pipe_3d.json \
   --debug-dir assets/debug-3d \
