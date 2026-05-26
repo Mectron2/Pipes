@@ -42,6 +42,7 @@ def resolve_cli_paths(args: argparse.Namespace) -> argparse.Namespace:
     args.profile_json = args.profile_json if args.profile_json is not None else run_dir / "points.json"
     args.pipe_3d_json = args.pipe_3d_json if args.pipe_3d_json is not None else run_dir / "pipe_3d.json"
     args.obj = args.obj if args.obj is not None else run_dir / "pipe.obj"
+    args.csv_output = args.csv_output if args.csv_output is not None else run_dir / "pipe_baseline_top_side.csv"
     args.debug_dir = args.debug_dir if args.debug_dir is not None else run_dir / "debug-pipeline"
     return args
 
@@ -174,11 +175,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-dir", type=Path, default=None, help="Specific run output directory")
     parser.add_argument("--profile-json", type=Path, default=None, help="Intermediate profile JSON")
     parser.add_argument("--pipe-3d-json", type=Path, default=None, help="Intermediate 3D JSON")
-    parser.add_argument("--obj", type=Path, default=Path("assets/pipe.obj"), help="Final Blender-importable OBJ")
+    parser.add_argument("--obj", type=Path, default=None, help="Final Blender-importable OBJ")
     parser.add_argument(
         "--csv-output",
         type=Path,
-        default=Path("assets/pipe_baseline_top_side.csv"),
+        default=None,
         help="TOP/SIDE baseline CSV output path",
     )
     parser.add_argument("--diameter-ft", type=float, required=True, help="Pipe outside diameter in feet")

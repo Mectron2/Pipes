@@ -29,6 +29,7 @@ class PipelineTest(unittest.TestCase):
                 profile_json=None,
                 pipe_3d_json=None,
                 obj=None,
+                csv_output=None,
                 debug_dir=None,
             )
 
@@ -38,6 +39,7 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(resolved.profile_json, runs_dir / "run_2" / "points.json")
             self.assertEqual(resolved.pipe_3d_json, runs_dir / "run_2" / "pipe_3d.json")
             self.assertEqual(resolved.obj, runs_dir / "run_2" / "pipe.obj")
+            self.assertEqual(resolved.csv_output, runs_dir / "run_2" / "pipe_baseline_top_side.csv")
             self.assertEqual(resolved.debug_dir, runs_dir / "run_2" / "debug-pipeline")
 
     def test_resolve_cli_paths_keeps_explicit_paths(self):
@@ -49,6 +51,7 @@ class PipelineTest(unittest.TestCase):
                 profile_json=tmp / "profile.json",
                 pipe_3d_json=tmp / "pipe.json",
                 obj=tmp / "pipe.obj",
+                csv_output=tmp / "pipe.csv",
                 debug_dir=tmp / "debug",
             )
 
@@ -58,6 +61,7 @@ class PipelineTest(unittest.TestCase):
             self.assertEqual(resolved.profile_json, tmp / "profile.json")
             self.assertEqual(resolved.pipe_3d_json, tmp / "pipe.json")
             self.assertEqual(resolved.obj, tmp / "pipe.obj")
+            self.assertEqual(resolved.csv_output, tmp / "pipe.csv")
             self.assertEqual(resolved.debug_dir, tmp / "debug")
 
     def test_full_pipeline_smoke(self):

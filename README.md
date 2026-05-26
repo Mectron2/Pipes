@@ -70,6 +70,7 @@ Default outputs:
 - `assets/runs/run_N/pipe_baseline_top_side.csv` - paired TOP/SIDE baseline CSV
 
 Each CLI run uses the next numeric run folder under `assets/runs/`, for example `run_1`, `run_2`, then `run_3`.
+Pass `--runs-dir /path/to/runs` to use a different base directory for auto-created `run_N` folders.
 Pass `--run-dir assets/runs/run_custom` to write to a specific run directory.
 
 Multiple side/profile drawings are supported. Pass them in route order:
