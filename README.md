@@ -37,40 +37,57 @@ Run all steps with one command:
 
 ```bash
 .venv/bin/python pipeline.py \
-  --profile-image assets/pipe.png \
-  --plan-image assets/img.png \
+  --profile-image assets/profile.png \
+  --plan-image assets/top.png \
   --diameter-ft 0.5 \
-  --pipe-od-mm 152.4 \
-  --debug-dir assets/debug-pipeline
+  --pipe-od-mm 152.4
 ```
 
 If the plan drawing is not already highlighted in red, let Gemini mark the pipe route first:
 
 ```bash
 .venv/bin/python pipeline.py \
-  --profile-image assets/pipe.png \
-  --plan-image assets/raw-plan.png \
+  --profile-image assets/profile.png \
+  --plan-image assets/top.png \
   --diameter-ft 0.5 \
-  --debug-dir assets/debug-pipeline \
   --use-gemini-plan
 ```
 
+Default input/output roots are defined in `pipeline.py` as `DEFAULT_INPUT_DIR` and `DEFAULT_OUTPUT_DIR`.
+By default, each CLI run uses the next numeric run folder under `runs/`, for example `runs/run_1`, `runs/run_2`, then `runs/run_3`.
+
+Default inputs:
+
+- `assets/profile.png` - side/profile drawing
+- `assets/top.png` - plan drawing with red pipe
+
 Default outputs:
 
-- `assets/points.json` - profile station/elevation points
-- `assets/pipe_3d.json` - 3D pipe polyline
-- `assets/pipe.obj` - Blender-importable tube mesh
-- `assets/pipe_baseline_top_side.csv` - paired TOP/SIDE baseline CSV
-- `assets/debug-pipeline/` - debug masks, overlays, and summary
+- `runs/run_N/points.json` - profile station/elevation points
+- `runs/run_N/pipe_3d.json` - 3D pipe polyline
+- `runs/run_N/pipe.obj` - Blender-importable tube mesh
+- `runs/run_N/pipe_baseline_top_side.csv` - paired TOP/SIDE baseline CSV
+- `runs/run_N/debug-pipeline/` - debug masks, overlays, and summary
+
+Pass `--output-dir /path/to/output` to write all default output files to a specific directory:
+
+```bash
+.venv/bin/python pipeline.py \
+  --profile-image assets/profile.png \
+  --plan-image assets/top.png \
+  --diameter-ft 0.5 \
+  --output-dir /path/to/output
+```
+
+When writing a multi-line command in `zsh`, keep `\` as the last character on every continued line. If `--output-dir` is on a new line after a command without `\`, the shell will run it as a separate command.
 
 Multiple side/profile drawings are supported. Pass them in route order:
 
 ```bash
 .venv/bin/python pipeline.py \
   --profile-image assets/profile_01.png assets/profile_02.png \
-  --plan-image assets/img.png \
-  --diameter-ft 0.5 \
-  --debug-dir assets/debug-pipeline
+  --plan-image assets/top.png \
+  --diameter-ft 0.5
 ```
 
 The end station of one profile is treated as the start station of the next profile. The first point of each following profile is skipped to avoid duplicating the joint.
@@ -80,9 +97,9 @@ The end station of one profile is treated as the start station of the next profi
 ### 1. Parse Side/Profile Drawing
 
 ```bash
-.venv/bin/python profile_to_points.py assets/pipe.png \
-  --out assets/points.json \
-  --debug-dir assets/debug-profile \
+.venv/bin/python profile_to_points.py assets/profile.png \
+  --out runs/manual/points.json \
+  --debug-dir runs/manual/debug-profile \
   --epsilon 8
 ```
 
@@ -90,8 +107,8 @@ Multiple profiles:
 
 ```bash
 .venv/bin/python profile_to_points.py assets/profile_01.png assets/profile_02.png \
-  --out assets/points.json \
-  --debug-dir assets/debug-profile
+  --out runs/manual/points.json \
+  --debug-dir runs/manual/debug-profile
 ```
 
 What it does:
@@ -110,10 +127,10 @@ What it does:
 ### 2. Build 3D Polyline From Plan View
 
 ```bash
-.venv/bin/python plan_to_3d.py assets/img.png \
-  --profile assets/points.json \
-  --out assets/pipe_3d.json \
-  --debug-dir assets/debug-3d \
+.venv/bin/python plan_to_3d.py assets/top.png \
+  --profile runs/manual/points.json \
+  --out runs/manual/pipe_3d.json \
+  --debug-dir runs/manual/debug-3d \
   --sample-ft 10
 ```
 
@@ -160,8 +177,8 @@ z_ft = profile height
 ### 3. Export Blender OBJ
 
 ```bash
-.venv/bin/python pipe_json_to_obj.py assets/pipe_3d.json \
-  --out assets/pipe.obj \
+.venv/bin/python pipe_json_to_obj.py runs/manual/pipe_3d.json \
+  --out runs/manual/pipe.obj \
   --diameter-ft 0.5 \
   --segments 16
 ```
@@ -173,19 +190,19 @@ Options:
 - `--no-caps` - leave pipe ends open
 - `--object-name` - OBJ object name
 
-Blender can import `assets/pipe.obj` directly. The OBJ vertices are written in feet, so `1 Blender unit = 1 ft` for this generated model.
+Blender can import `runs/manual/pipe.obj` directly. The OBJ vertices are written in feet, so `1 Blender unit = 1 ft` for this generated model.
 
 ### 4. Export TOP/SIDE Baseline CSV
 
 ```bash
 .venv/bin/python pipe_top_side_csv.py \
-  --profile-image assets/profile-2.png \
-  --plan-image assets/top-2-highlighted.png \
+  --profile-image assets/profile.png \
+  --plan-image assets/top.png \
   --pipe-od-mm 426 \
-  --out assets/pipe_baseline_top_side.csv \
-  --profile-json assets/points.json \
-  --pipe-3d-json assets/pipe_3d.json \
-  --debug-dir assets/debug-top-side-csv
+  --out runs/manual/pipe_baseline_top_side.csv \
+  --profile-json runs/manual/points.json \
+  --pipe-3d-json runs/manual/pipe_3d.json \
+  --debug-dir runs/manual/debug-top-side-csv
 ```
 
 The CSV contains paired plan/profile rows with foot-based columns:
