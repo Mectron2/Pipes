@@ -3,6 +3,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import numpy as np
+
 import pipeline
 
 
@@ -40,14 +42,19 @@ class PipelineTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             expected_gemini_plan = tmp / "debug" / "gemini" / "plan.png"
+            highlighted_image = np.zeros((2, 2, 3), dtype=np.uint8)
             gemini_highlighter = mock.Mock()
-            gemini_highlighter.highlight_force_main.return_value = True
+            gemini_highlighter.highlight_force_main_image.return_value = highlighted_image
 
             with (
                 mock.patch.object(pipeline.profile_parser, "parse_profiles", return_value={"points": [{"station_ft": 0}]}),
                 mock.patch.dict("sys.modules", {"gemini_highlighter": gemini_highlighter}),
                 mock.patch.object(pipeline.plan_to_3d, "build_pipe_3d", return_value={"points": [{"x": 1}]}) as build_pipe_3d,
-                mock.patch.object(pipeline.pipe_json_to_obj, "convert_json_to_obj", return_value=(8, 6)),
+                mock.patch.object(
+                    pipeline.pipe_json_to_obj,
+                    "convert_pipe_data_to_obj",
+                    return_value={"vertices": [], "faces": [], "vertex_count": 8, "face_count": 6},
+                ),
             ):
                 summary = pipeline.run_pipeline(
                     profile_image=[Path("assets/profile.png")],
@@ -66,9 +73,12 @@ class PipelineTest(unittest.TestCase):
                     use_gemini_plan=True,
                 )
 
-            gemini_highlighter.highlight_force_main.assert_called_once_with(Path("assets/top.png"), expected_gemini_plan)
+            gemini_highlighter.highlight_force_main_image.assert_called_once_with(Path("assets/top.png"))
+            self.assertTrue(expected_gemini_plan.exists())
             build_pipe_3d.assert_called_once()
             self.assertEqual(build_pipe_3d.call_args.args[0], expected_gemini_plan)
+            self.assertEqual(build_pipe_3d.call_args.kwargs["profile_result"], {"points": [{"station_ft": 0}]})
+            self.assertIs(build_pipe_3d.call_args.kwargs["plan_image"], highlighted_image)
             self.assertEqual(summary["plan_image"], "assets/top.png")
             self.assertEqual(summary["plan_image_used"], str(expected_gemini_plan))
             self.assertTrue(summary["gemini"]["plan_enabled"])
@@ -86,7 +96,11 @@ class PipelineTest(unittest.TestCase):
             with (
                 mock.patch.object(pipeline.profile_parser, "parse_profiles", return_value={"points": [{"station_ft": 0}]}),
                 mock.patch.object(pipeline.plan_to_3d, "build_pipe_3d", return_value=pipe_3d),
-                mock.patch.object(pipeline.pipe_json_to_obj, "convert_json_to_obj", return_value=(8, 6)),
+                mock.patch.object(
+                    pipeline.pipe_json_to_obj,
+                    "convert_pipe_data_to_obj",
+                    return_value={"vertices": [], "faces": [], "vertex_count": 8, "face_count": 6},
+                ) as convert_pipe_data_to_obj,
                 mock.patch.object(
                     pipeline.pipe_top_side_csv,
                     "write_top_side_csv",
@@ -110,10 +124,13 @@ class PipelineTest(unittest.TestCase):
                     csv_output=tmp / "pipe_baseline_top_side.csv",
                 )
 
-            write_top_side_csv.assert_called_once_with(pipe_3d, tmp / "pipe_baseline_top_side.csv", 152.4, 10.0)
+            expected_pipe_od_mm = 0.5 * pipeline.FEET_TO_MILLIMETERS
+            write_top_side_csv.assert_called_once_with(pipe_3d, tmp / "pipe_baseline_top_side.csv", expected_pipe_od_mm, 10.0)
+            self.assertIs(convert_pipe_data_to_obj.call_args.args[0], pipe_3d)
             self.assertEqual(summary["outputs"]["csv"], str(tmp / "pipe_baseline_top_side.csv"))
-            self.assertEqual(summary["pipe_od_mm"], 152.4)
+            self.assertEqual(summary["pipe_od_mm"], expected_pipe_od_mm)
             self.assertEqual(summary["csv_rows"], 2)
+            self.assertIs(summary["pipe_3d"], pipe_3d)
 
 
 if __name__ == "__main__":

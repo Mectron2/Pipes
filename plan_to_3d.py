@@ -159,12 +159,16 @@ def simplify_path(points: list[Point], epsilon: float) -> list[Point]:
     return profile_to_points.rdp(points, epsilon)
 
 
-def load_profile_points(profile_path: Path) -> list[dict]:
-    data = json.loads(profile_path.read_text(encoding="utf-8"))
+def profile_points_from_data(data: dict) -> list[dict]:
     points = sorted(data["points"], key=lambda point: point["station_ft"])
     if len(points) < 2:
         raise ValueError("Profile JSON must contain at least two points")
     return points
+
+
+def load_profile_points(profile_path: Path) -> list[dict]:
+    data = json.loads(profile_path.read_text(encoding="utf-8"))
+    return profile_points_from_data(data)
 
 
 def interpolate_height(profile_points: list[dict], station_ft: float) -> float:
@@ -326,13 +330,21 @@ def build_pipe_3d(
     debug_dir: Path | None,
     sample_ft: float,
     simplify_px: float,
+    profile_result: dict | None = None,
+    plan_image: np.ndarray | None = None,
 ) -> dict:
-    image, _ = profile_to_points.load_image(plan_path)
+    if plan_image is not None:
+        image = plan_image.copy()
+    else:
+        image, _ = profile_to_points.load_image(plan_path)
     red_mask = red_pipe_mask(image)
     clean_mask = largest_component(red_mask)
     centerline = ordered_centerline(clean_mask)
     centerline = simplify_path(centerline, simplify_px)
-    profile_points = load_profile_points(profile_path)
+    if profile_result is not None:
+        profile_points = profile_points_from_data(profile_result)
+    else:
+        profile_points = load_profile_points(profile_path)
     result = build_3d_result(plan_path, profile_path, centerline, profile_points, sample_ft)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

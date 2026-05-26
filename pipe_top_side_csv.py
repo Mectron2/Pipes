@@ -94,6 +94,7 @@ def build_top_side_rows(pipe_3d: dict, pipe_od_mm: float, bend_angle_degrees: fl
 
     pipe_od = _format_pipe_od(pipe_od_mm)
     rows = []
+    first_station_ft = _csv_point_value(points[0], "chainage_ft")
 
     for index, point in enumerate(points):
         order = index + 1
@@ -124,6 +125,7 @@ def build_top_side_rows(pipe_3d: dict, pipe_od_mm: float, bend_angle_degrees: fl
     for index, point in enumerate(points):
         order = index + 1
         station_ft = _csv_point_value(point, "chainage_ft")
+        side_x_ft = station_ft - first_station_ft
         plan_x_ft = _csv_point_value(point, "x_ft")
         plan_y_ft = _csv_point_value(point, "y_ft")
         elevation_ft = _csv_point_value(point, "z_ft")
@@ -133,7 +135,7 @@ def build_top_side_rows(pipe_3d: dict, pipe_od_mm: float, bend_angle_degrees: fl
                 "polyline_id": "PIPE_BL_SIDE",
                 "point_order": str(order),
                 "point_name": f"S{order:02d}",
-                "cad_x_ft": _format_number(station_ft),
+                "cad_x_ft": _format_number(side_x_ft),
                 "cad_y_ft": _format_number(elevation_ft),
                 "cad_z_ft": _format_number(0.0),
                 "station_ft": _format_number(station_ft),
@@ -189,6 +191,7 @@ def run_top_side_csv(
             debug_subdir(debug_dir, "plan-3d"),
             sample_ft,
             plan_simplify_px,
+            profile_result=profile,
         )
     else:
         with TemporaryDirectory() as tmpdir:
@@ -208,6 +211,7 @@ def run_top_side_csv(
                 debug_subdir(debug_dir, "plan-3d"),
                 sample_ft,
                 plan_simplify_px,
+                profile_result=profile,
             )
 
     rows = write_top_side_csv(pipe_3d, output_csv, pipe_od_mm, bend_angle_degrees)
@@ -230,7 +234,12 @@ def run_top_side_csv(
         debug_dir.mkdir(parents=True, exist_ok=True)
         (debug_dir / "top_side_csv_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
-    return summary
+    return {
+        **summary,
+        "profile": profile,
+        "pipe_3d": pipe_3d,
+        "csv": rows,
+    }
 
 
 def parse_args() -> argparse.Namespace:

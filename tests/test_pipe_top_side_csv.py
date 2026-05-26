@@ -10,9 +10,9 @@ class PipeTopSideCsvTest(unittest.TestCase):
     def test_build_top_side_rows_uses_foot_columns(self):
         pipe_3d = {
             "points": [
-                {"chainage_ft": 0.0, "x_ft": 0.0, "y_ft": 0.0, "z_ft": 100.0},
-                {"chainage_ft": 10.0, "x_ft": 10.0, "y_ft": 0.0, "z_ft": 99.5},
-                {"chainage_ft": 20.0, "x_ft": 10.0, "y_ft": 10.0, "z_ft": 99.0},
+                {"chainage_ft": 1000.0, "x_ft": 0.0, "y_ft": 0.0, "z_ft": 100.0},
+                {"chainage_ft": 1010.0, "x_ft": 10.0, "y_ft": 0.0, "z_ft": 99.5},
+                {"chainage_ft": 1020.0, "x_ft": 10.0, "y_ft": 10.0, "z_ft": 99.0},
             ]
         }
 
@@ -22,7 +22,7 @@ class PipeTopSideCsvTest(unittest.TestCase):
         self.assertEqual(rows[0]["view"], "TOP")
         self.assertEqual(rows[0]["point_name"], "T01")
         self.assertEqual(rows[0]["cad_x_ft"], "0.000")
-        self.assertEqual(rows[0]["station_ft"], "0.000")
+        self.assertEqual(rows[0]["station_ft"], "1000.000")
         self.assertEqual(rows[0]["elevation_ft"], "100.000")
         self.assertEqual(rows[0]["pipe_od_mm"], "426")
         self.assertEqual(rows[1]["segment_type"], "bend")
@@ -31,6 +31,8 @@ class PipeTopSideCsvTest(unittest.TestCase):
         self.assertEqual(rows[3]["cad_x_ft"], "0.000")
         self.assertEqual(rows[3]["cad_y_ft"], "100.000")
         self.assertEqual(rows[3]["segment_type"], "profile")
+        self.assertEqual(rows[4]["cad_x_ft"], "10.000")
+        self.assertEqual(rows[4]["station_ft"], "1010.000")
 
     def test_write_top_side_csv(self):
         pipe_3d = {
