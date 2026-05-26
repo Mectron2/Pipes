@@ -124,10 +124,11 @@ class PipelineTest(unittest.TestCase):
                     csv_output=tmp / "pipe_baseline_top_side.csv",
                 )
 
-            write_top_side_csv.assert_called_once_with(pipe_3d, tmp / "pipe_baseline_top_side.csv", 152.4, 10.0)
+            expected_pipe_od_mm = 0.5 * pipeline.FEET_TO_MILLIMETERS
+            write_top_side_csv.assert_called_once_with(pipe_3d, tmp / "pipe_baseline_top_side.csv", expected_pipe_od_mm, 10.0)
             self.assertIs(convert_pipe_data_to_obj.call_args.args[0], pipe_3d)
             self.assertEqual(summary["outputs"]["csv"], str(tmp / "pipe_baseline_top_side.csv"))
-            self.assertEqual(summary["pipe_od_mm"], 152.4)
+            self.assertEqual(summary["pipe_od_mm"], expected_pipe_od_mm)
             self.assertEqual(summary["csv_rows"], 2)
             self.assertIs(summary["pipe_3d"], pipe_3d)
 

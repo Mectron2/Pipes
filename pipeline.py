@@ -13,6 +13,9 @@ import plan_to_3d
 from logger import setup_logging
 
 
+FEET_TO_MILLIMETERS = 304.8
+
+
 def debug_subdir(debug_dir: Path | None, name: str) -> Path | None:
     if debug_dir is None:
         return None
@@ -90,7 +93,7 @@ def run_pipeline(
     )
     csv_rows = []
     if csv_output is not None:
-        csv_pipe_od_mm = pipe_od_mm if pipe_od_mm is not None else diameter_ft * 304.8
+        csv_pipe_od_mm = pipe_od_mm if pipe_od_mm is not None else diameter_ft * FEET_TO_MILLIMETERS
         csv_rows = pipe_top_side_csv.write_top_side_csv(
             pipe_3d,
             csv_output,
@@ -116,7 +119,7 @@ def run_pipeline(
         "obj_vertices": obj_result["vertex_count"],
         "obj_faces": obj_result["face_count"],
         "diameter_ft": diameter_ft,
-        "pipe_od_mm": pipe_od_mm if pipe_od_mm is not None else diameter_ft * 304.8,
+        "pipe_od_mm": pipe_od_mm if pipe_od_mm is not None else diameter_ft * FEET_TO_MILLIMETERS,
         "csv_rows": len(csv_rows),
     }
 
