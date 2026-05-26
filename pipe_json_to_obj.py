@@ -49,8 +49,7 @@ def project_perpendicular(vector: Vec3, normal: Vec3) -> Vec3:
     return sub(vector, mul(normal, dot(vector, normal)))
 
 
-def load_pipe_points(path: Path) -> list[Vec3]:
-    data = json.loads(path.read_text(encoding="utf-8"))
+def pipe_points_from_data(data: dict) -> list[Vec3]:
     points = []
     for item in data.get("points", []):
         try:
@@ -61,6 +60,11 @@ def load_pipe_points(path: Path) -> list[Vec3]:
     if len(points) < 2:
         raise ValueError("Input JSON must contain at least two 3D points")
     return remove_duplicate_points(points)
+
+
+def load_pipe_points(path: Path) -> list[Vec3]:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return pipe_points_from_data(data)
 
 
 def remove_duplicate_points(points: list[Vec3]) -> list[Vec3]:
@@ -172,6 +176,35 @@ def write_obj(path: Path, vertices: list[Vec3], faces: list[tuple[int, ...]], ob
             file.write("f " + " ".join(str(index) for index in face) + "\n")
 
 
+def build_obj_result(
+    pipe_3d: dict,
+    diameter_ft: float,
+    radial_segments: int,
+    cap_ends: bool,
+) -> dict:
+    points = pipe_points_from_data(pipe_3d)
+    vertices, faces = build_tube_mesh(points, diameter_ft, radial_segments, cap_ends)
+    return {
+        "vertices": vertices,
+        "faces": faces,
+        "vertex_count": len(vertices),
+        "face_count": len(faces),
+    }
+
+
+def convert_pipe_data_to_obj(
+    pipe_3d: dict,
+    output_path: Path,
+    diameter_ft: float,
+    radial_segments: int,
+    cap_ends: bool,
+    object_name: str,
+) -> dict:
+    result = build_obj_result(pipe_3d, diameter_ft, radial_segments, cap_ends)
+    write_obj(output_path, result["vertices"], result["faces"], object_name)
+    return result
+
+
 def convert_json_to_obj(
     input_path: Path,
     output_path: Path,
@@ -180,10 +213,9 @@ def convert_json_to_obj(
     cap_ends: bool,
     object_name: str,
 ) -> tuple[int, int]:
-    points = load_pipe_points(input_path)
-    vertices, faces = build_tube_mesh(points, diameter_ft, radial_segments, cap_ends)
-    write_obj(output_path, vertices, faces, object_name)
-    return len(vertices), len(faces)
+    data = json.loads(input_path.read_text(encoding="utf-8"))
+    result = convert_pipe_data_to_obj(data, output_path, diameter_ft, radial_segments, cap_ends, object_name)
+    return result["vertex_count"], result["face_count"]
 
 
 def parse_args() -> argparse.Namespace:

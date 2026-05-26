@@ -3,6 +3,9 @@ import json
 import logging
 from pathlib import Path
 
+import cv2
+import numpy as np
+
 import profile_to_points as profile_parser
 import pipe_json_to_obj
 import pipe_top_side_csv
@@ -16,9 +19,14 @@ def debug_subdir(debug_dir: Path | None, name: str) -> Path | None:
     return debug_dir / name
 
 
-def prepare_plan_image(plan_image: Path, pipe_3d_json: Path, debug_dir: Path | None, use_gemini_plan: bool) -> Path:
+def prepare_plan_image(
+    plan_image: Path,
+    pipe_3d_json: Path,
+    debug_dir: Path | None,
+    use_gemini_plan: bool,
+) -> tuple[Path, np.ndarray | None]:
     if not use_gemini_plan:
-        return plan_image
+        return plan_image, None
 
     import gemini_highlighter
 
@@ -28,9 +36,11 @@ def prepare_plan_image(plan_image: Path, pipe_3d_json: Path, debug_dir: Path | N
     gemini_output_dir.mkdir(parents=True, exist_ok=True)
 
     highlighted_plan = gemini_output_dir / "plan.png"
-    if not gemini_highlighter.highlight_force_main(plan_image, highlighted_plan):
+    highlighted_image = gemini_highlighter.highlight_force_main_image(plan_image)
+    if highlighted_image is None:
         raise RuntimeError("Gemini plan highlighting failed")
-    return highlighted_plan
+    cv2.imwrite(str(highlighted_plan), highlighted_image)
+    return highlighted_plan, highlighted_image
 
 
 def run_pipeline(
@@ -53,7 +63,7 @@ def run_pipeline(
     use_gemini_plan: bool = False,
 ) -> dict:
     profile_images = profile_image if isinstance(profile_image, list) else [profile_image]
-    plan_image_used = prepare_plan_image(plan_image, pipe_3d_json, debug_dir, use_gemini_plan)
+    plan_image_used, plan_image_data = prepare_plan_image(plan_image, pipe_3d_json, debug_dir, use_gemini_plan)
     profile = profile_parser.parse_profiles(
         profile_images,
         profile_json,
@@ -67,9 +77,11 @@ def run_pipeline(
         debug_subdir(debug_dir, "plan-3d"),
         sample_ft,
         plan_simplify_px,
+        profile_result=profile,
+        plan_image=plan_image_data,
     )
-    vertex_count, face_count = pipe_json_to_obj.convert_json_to_obj(
-        pipe_3d_json,
+    obj_result = pipe_json_to_obj.convert_pipe_data_to_obj(
+        pipe_3d,
         obj_output,
         diameter_ft,
         obj_segments,
@@ -101,8 +113,8 @@ def run_pipeline(
         },
         "profile_points": len(profile["points"]),
         "pipe_3d_points": len(pipe_3d["points"]),
-        "obj_vertices": vertex_count,
-        "obj_faces": face_count,
+        "obj_vertices": obj_result["vertex_count"],
+        "obj_faces": obj_result["face_count"],
         "diameter_ft": diameter_ft,
         "pipe_od_mm": pipe_od_mm if pipe_od_mm is not None else diameter_ft * 304.8,
         "csv_rows": len(csv_rows),
@@ -112,7 +124,13 @@ def run_pipeline(
         debug_dir.mkdir(parents=True, exist_ok=True)
         (debug_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
-    return summary
+    return {
+        **summary,
+        "profile": profile,
+        "pipe_3d": pipe_3d,
+        "obj": obj_result,
+        "csv": csv_rows,
+    }
 
 
 def parse_args() -> argparse.Namespace:

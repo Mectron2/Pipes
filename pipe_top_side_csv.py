@@ -189,6 +189,7 @@ def run_top_side_csv(
             debug_subdir(debug_dir, "plan-3d"),
             sample_ft,
             plan_simplify_px,
+            profile_result=profile,
         )
     else:
         with TemporaryDirectory() as tmpdir:
@@ -208,6 +209,7 @@ def run_top_side_csv(
                 debug_subdir(debug_dir, "plan-3d"),
                 sample_ft,
                 plan_simplify_px,
+                profile_result=profile,
             )
 
     rows = write_top_side_csv(pipe_3d, output_csv, pipe_od_mm, bend_angle_degrees)
@@ -230,7 +232,12 @@ def run_top_side_csv(
         debug_dir.mkdir(parents=True, exist_ok=True)
         (debug_dir / "top_side_csv_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
-    return summary
+    return {
+        **summary,
+        "profile": profile,
+        "pipe_3d": pipe_3d,
+        "csv": rows,
+    }
 
 
 def parse_args() -> argparse.Namespace:

@@ -9,20 +9,20 @@ from PIL import Image
 from google import genai
 from logger import setup_logging
 
-def highlight_force_main(image_path: Path, output_path: Path) -> bool:
+def highlight_force_main_image(image_path: Path) -> np.ndarray | None:
     logger = logging.getLogger(__name__)
     """
     Sends the plan image to Gemini 3.1 Flash Image Preview to highlight the FORCE MAIN line in red.
-    Saves the image where the red line is drawn.
+    Returns the image where the red line is drawn.
     """
     if not os.environ.get("GEMINI_API_KEY"):
         logger.error("GEMINI_API_KEY environment variable is missing.")
-        return False
+        return None
 
     image_bgr = cv2.imread(str(image_path))
     if image_bgr is None:
         print(f"Error: Could not read image {image_path}", file=sys.stderr)
-        return False
+        return None
 
     client = genai.Client()
     
@@ -44,7 +44,7 @@ def highlight_force_main(image_path: Path, output_path: Path) -> bool:
         )
     except Exception as e:
         logger.exception("Error calling Gemini API")
-        return False
+        return None
     
     logger.info("Received response from Gemini. Extracting image...")
     
@@ -59,19 +59,27 @@ def highlight_force_main(image_path: Path, output_path: Path) -> bool:
                 np_arr = np.frombuffer(image_bytes, np.uint8)
                 img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
                 if img is not None:
-                    cv2.imwrite(str(output_path), img)
-                    return True
+                    return img
             # Check if there is an image property in the part (for some newer SDK versions)
             if hasattr(part, 'image') and part.image:
                 image_bytes = part.image.image_bytes
                 np_arr = np.frombuffer(image_bytes, np.uint8)
                 img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
                 if img is not None:
-                    cv2.imwrite(str(output_path), img)
-                    return True
+                    return img
                     
     logger.error("Gemini response did not contain any valid image data.")
-    return False
+    return None
+
+
+def highlight_force_main(image_path: Path, output_path: Path) -> bool:
+    image = highlight_force_main_image(image_path)
+    if image is None:
+        return False
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(str(output_path), image)
+    return True
 
 def main() -> int:
     setup_logging()
