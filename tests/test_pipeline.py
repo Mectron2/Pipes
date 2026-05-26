@@ -10,22 +10,30 @@ import pipeline
 
 
 class PipelineTest(unittest.TestCase):
+    def test_parse_args_accepts_output_dir(self):
+        with mock.patch(
+            "sys.argv",
+            ["pipeline.py", "--diameter-ft", "0.5", "--output-dir", "custom-output"],
+        ):
+            args = pipeline.parse_args()
+
+        self.assertEqual(args.output_dir, Path("custom-output"))
+
     def test_next_run_dir_uses_next_numeric_suffix(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            runs_dir = Path(tmpdir) / "assets" / "runs"
-            (runs_dir / "run_1").mkdir(parents=True)
-            (runs_dir / "run_7").mkdir()
-            (runs_dir / "run_draft").mkdir()
+            output_root = Path(tmpdir) / "runs"
+            (output_root / "run_1").mkdir(parents=True)
+            (output_root / "run_7").mkdir()
+            (output_root / "run_draft").mkdir()
 
-            self.assertEqual(pipeline.next_run_dir(runs_dir), runs_dir / "run_8")
+            self.assertEqual(pipeline.next_run_dir(output_root), output_root / "run_8")
 
-    def test_resolve_cli_paths_defaults_to_run_debug_pipeline(self):
+    def test_resolve_cli_paths_defaults_to_next_run_under_default_output_dir(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            runs_dir = Path(tmpdir) / "assets" / "runs"
-            (runs_dir / "run_1").mkdir(parents=True)
+            output_root = Path(tmpdir) / "runs"
+            (output_root / "run_1").mkdir(parents=True)
             args = SimpleNamespace(
-                runs_dir=runs_dir,
-                run_dir=None,
+                output_dir=None,
                 profile_json=None,
                 pipe_3d_json=None,
                 obj=None,
@@ -33,21 +41,21 @@ class PipelineTest(unittest.TestCase):
                 debug_dir=None,
             )
 
-            resolved = pipeline.resolve_cli_paths(args)
+            with mock.patch.object(pipeline, "DEFAULT_OUTPUT_DIR", output_root):
+                resolved = pipeline.resolve_cli_paths(args)
 
-            self.assertEqual(resolved.run_dir, runs_dir / "run_2")
-            self.assertEqual(resolved.profile_json, runs_dir / "run_2" / "points.json")
-            self.assertEqual(resolved.pipe_3d_json, runs_dir / "run_2" / "pipe_3d.json")
-            self.assertEqual(resolved.obj, runs_dir / "run_2" / "pipe.obj")
-            self.assertEqual(resolved.csv_output, runs_dir / "run_2" / "pipe_baseline_top_side.csv")
-            self.assertEqual(resolved.debug_dir, runs_dir / "run_2" / "debug-pipeline")
+            self.assertEqual(resolved.output_dir, output_root / "run_2")
+            self.assertEqual(resolved.profile_json, output_root / "run_2" / "points.json")
+            self.assertEqual(resolved.pipe_3d_json, output_root / "run_2" / "pipe_3d.json")
+            self.assertEqual(resolved.obj, output_root / "run_2" / "pipe.obj")
+            self.assertEqual(resolved.csv_output, output_root / "run_2" / "pipe_baseline_top_side.csv")
+            self.assertEqual(resolved.debug_dir, output_root / "run_2" / "debug-pipeline")
 
     def test_resolve_cli_paths_keeps_explicit_paths(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)
             args = SimpleNamespace(
-                runs_dir=tmp / "runs",
-                run_dir=tmp / "custom-run",
+                output_dir=tmp / "custom-output",
                 profile_json=tmp / "profile.json",
                 pipe_3d_json=tmp / "pipe.json",
                 obj=tmp / "pipe.obj",
@@ -57,39 +65,106 @@ class PipelineTest(unittest.TestCase):
 
             resolved = pipeline.resolve_cli_paths(args)
 
-            self.assertEqual(resolved.run_dir, tmp / "custom-run")
+            self.assertEqual(resolved.output_dir, tmp / "custom-output")
             self.assertEqual(resolved.profile_json, tmp / "profile.json")
             self.assertEqual(resolved.pipe_3d_json, tmp / "pipe.json")
             self.assertEqual(resolved.obj, tmp / "pipe.obj")
             self.assertEqual(resolved.csv_output, tmp / "pipe.csv")
             self.assertEqual(resolved.debug_dir, tmp / "debug")
 
-    def test_full_pipeline_smoke(self):
+    def test_resolve_cli_paths_uses_output_dir_for_default_output_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            tmp = Path(tmpdir)
-            summary = pipeline.run_pipeline(
-                profile_image=[Path("assets/pipe.png")],
-                plan_image=Path("assets/img.png"),
-                profile_json=tmp / "points.json",
-                pipe_3d_json=tmp / "pipe_3d.json",
-                obj_output=tmp / "pipe.obj",
-                diameter_ft=0.5,
-                debug_dir=tmp / "debug",
-                profile_epsilon=8.0,
-                sample_ft=10.0,
-                plan_simplify_px=2.0,
-                obj_segments=8,
-                cap_ends=True,
-                object_name="pipeline_pipe",
+            output_dir = Path(tmpdir) / "custom-output"
+            args = SimpleNamespace(
+                output_dir=output_dir,
+                profile_json=None,
+                pipe_3d_json=None,
+                obj=None,
+                csv_output=None,
+                debug_dir=None,
             )
 
-            self.assertTrue((tmp / "points.json").exists())
-            self.assertTrue((tmp / "pipe_3d.json").exists())
-            self.assertTrue((tmp / "pipe.obj").exists())
+            resolved = pipeline.resolve_cli_paths(args)
+
+            self.assertEqual(resolved.output_dir, output_dir)
+            self.assertEqual(resolved.profile_json, output_dir / "points.json")
+            self.assertEqual(resolved.pipe_3d_json, output_dir / "pipe_3d.json")
+            self.assertEqual(resolved.obj, output_dir / "pipe.obj")
+            self.assertEqual(resolved.csv_output, output_dir / "pipe_baseline_top_side.csv")
+            self.assertEqual(resolved.debug_dir, output_dir / "debug-pipeline")
+
+    def test_run_pipeline_writes_outputs_to_requested_paths(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            profile_json = tmp / "points.json"
+            pipe_3d_json = tmp / "pipe_3d.json"
+            obj_output = tmp / "pipe.obj"
+            csv_output = tmp / "pipe_baseline_top_side.csv"
+
+            def parse_profiles_side_effect(_profile_images, output_path, _debug_dir, _epsilon):
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text('{"points": [{"station_ft": 0}]}', encoding="utf-8")
+                return {"points": [{"station_ft": 0}]}
+
+            def build_pipe_3d_side_effect(_plan_image, _profile_json, output_path, *_args, **_kwargs):
+                pipe_3d = {"points": [{"chainage_ft": 0.0, "x_ft": 0.0, "y_ft": 0.0, "z_ft": 100.0}]}
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text('{"points": []}', encoding="utf-8")
+                return pipe_3d
+
+            def convert_pipe_data_to_obj_side_effect(_pipe_3d, output_path, *_args):
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text("o pipeline_pipe\n", encoding="utf-8")
+                return {"vertices": [], "faces": [], "vertex_count": 8, "face_count": 6}
+
+            def write_top_side_csv_side_effect(_pipe_3d, output_path, *_args):
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_text("view\nTOP\n", encoding="utf-8")
+                return [{"view": "TOP"}]
+
+            with (
+                mock.patch.object(pipeline.profile_parser, "parse_profiles", side_effect=parse_profiles_side_effect),
+                mock.patch.object(pipeline.plan_to_3d, "build_pipe_3d", side_effect=build_pipe_3d_side_effect),
+                mock.patch.object(
+                    pipeline.pipe_json_to_obj,
+                    "convert_pipe_data_to_obj",
+                    side_effect=convert_pipe_data_to_obj_side_effect,
+                ),
+                mock.patch.object(
+                    pipeline.pipe_top_side_csv,
+                    "write_top_side_csv",
+                    side_effect=write_top_side_csv_side_effect,
+                ),
+            ):
+                summary = pipeline.run_pipeline(
+                    profile_image=[Path("input/profile.png")],
+                    plan_image=Path("input/top.png"),
+                    profile_json=profile_json,
+                    pipe_3d_json=pipe_3d_json,
+                    obj_output=obj_output,
+                    diameter_ft=0.5,
+                    debug_dir=tmp / "debug",
+                    profile_epsilon=8.0,
+                    sample_ft=10.0,
+                    plan_simplify_px=2.0,
+                    obj_segments=8,
+                    cap_ends=True,
+                    object_name="pipeline_pipe",
+                    csv_output=csv_output,
+                )
+
+            self.assertTrue(profile_json.exists())
+            self.assertTrue(pipe_3d_json.exists())
+            self.assertTrue(obj_output.exists())
+            self.assertTrue(csv_output.exists())
             self.assertTrue((tmp / "debug" / "summary.json").exists())
 
-        self.assertGreaterEqual(summary["profile_points"], 6)
-        self.assertGreaterEqual(summary["pipe_3d_points"], 20)
+        self.assertEqual(summary["outputs"]["profile_json"], str(profile_json))
+        self.assertEqual(summary["outputs"]["pipe_3d_json"], str(pipe_3d_json))
+        self.assertEqual(summary["outputs"]["obj"], str(obj_output))
+        self.assertEqual(summary["outputs"]["csv"], str(csv_output))
+        self.assertEqual(summary["profile_points"], 1)
+        self.assertEqual(summary["pipe_3d_points"], 1)
         self.assertGreater(summary["obj_vertices"], 0)
         self.assertGreater(summary["obj_faces"], 0)
 
